@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
     <title>kkustockphoto</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-EVSTQN3/azprG1Anm3QDgpJLIm9Nao0Yz1ztcQTwFspd3yD65VohhpuuCOmLASjC" crossorigin="anonymous">
     <style>
         .form-section { margin: 20px 0; padding: 10px; border: 1px solid #ccc; border-radius: 5px; }
         .form-section h3 { margin-top: 0; }
@@ -23,6 +25,7 @@
     </style>
 </head>
 <body>
+ 
     <!-- ข้อความแนะนำ -->
     <div class="message info">
         <p><strong>คำแนะนำ:</strong> กรุณาอัปโหลดรูปภาพก่อน โดยใช้ฟอร์มด้านล่าง เพื่อให้มีรูปภาพสำหรับกำหนดหมวดหมู่และแท็ก</p>
@@ -41,6 +44,9 @@
             <button type="submit">Upload Album</button>
         </form>
     </div>
+
+    <!-- Popup สำหรับเลือกวัตถุประสงค์ -->
+
 
     <!-- ฟอร์มอัปโหลดรูปภาพไปยังอัลบั้มที่มีอยู่ -->
     <div class="form-section">
@@ -156,7 +162,33 @@
         </select>
     </div>
     <div class="image-list" id="imageList"></div>
-
+    <!-- #modal# -->
+    <div class="modal fade" id="exampleModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="exampleModalLabel">Modal title</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="downloadPopup" style=" background: white; padding: 20px; border: 1px solid #ccc; z-index: 1000;">
+                    <h3>กรุณาเลือกวัตถุประสงค์ในการดาวน์โหลด</h3>
+                    <div id="data_image"></div>
+                    <form id="purposeForm">
+                        <label><input type="checkbox" name="purposes" value="ใช้ในการประชาสัมพันธ์"> ใช้ในการประชาสัมพันธ์</label><br>
+                        <label><input type="checkbox" name="purposes" value="ใช้เป็นสื่อการเรียนการสอน"> ใช้เป็นสื่อการเรียนการสอน</label><br>
+                        <label><input type="checkbox" name="purposes" value="ใช้ต่อยอดโครงงาน"> ใช้ต่อยอดโครงงาน</label><br>
+                        <label><input type="checkbox" name="purposes" value="อัพไว้ดูเล่น"> อัพไว้ดูเล่น</label><br>
+                    </form>
+                </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>            
+                <button type="button" class="btn btn-primary" id="submitPurpose">Submit</button>
+            </div>
+          </div>
+        </div>
+      </div>
     <script>
         let currentAlbumId = null;
 
@@ -268,12 +300,20 @@
                                 <span>Category: ${img.category && img.category.length > 0 ? img.category.map(cat => `<a href="#" onclick="searchCategory('${cat}'); return false;">${cat}</a>`).join(', ') : 'ยังไม่ได้กำหนด'}</span><br>
                                 <span>Views: ${img.views}</span><br>
                                 <span>Downloads: ${img.downloads}</span><br>
-                                <a href="http://localhost:3000/image/${img._id}/download">ดาวน์โหลด</a>
+                                <form action="http://localhost:3000/image/${img._id}/download" method="POST" style="display:inline;">
+                                <button type="submit">ดาวน์โหลด</button>
+                                </form>
                             </div>
                         </div>
+                        
+                                <button onclick='modaldownload("${img._id}")' type="button" class="btn btn-primary" >
+  Launch demo modal
+</button>
+                               
+                        
                     `;
                 }).join('');
-
+                // #ดาวน์โหลด#
             // เพิ่ม event listener สำหรับคลิกที่รูปภาพเพื่อดูขนาดเต็ม
             document.querySelectorAll('.image-item').forEach(item => {
                 item.addEventListener('click', function(e) {
@@ -283,6 +323,29 @@
                     }
                 });
             });
+        }
+        function modaldownload(imageId){
+            $("#exampleModal").modal("show");
+            const form = document.getElementById('data_image');
+            // form.innerHTML = imageId;
+            const data = {
+                imageId: imageId
+            };
+            fetch(`http://localhost:3000/image/download`, {
+
+            
+                method: 'POST',
+            
+                
+                body: JSON.stringify(data)
+            
+            })
+            
+                .then(response => response.json())
+            
+                .then(data => console.log(data))
+            
+                .catch(error => console.log(error));
         }
 
         function displayAlbumImages(images) {
@@ -680,6 +743,44 @@
             fetchImages();
             loadTags();
         });
+        
+    document.getElementById('downloadBtn').addEventListener('click', function() {
+      document.getElementById('purposeModal').style.display = 'flex';
+    });
+
+    document.getElementById('confirmBtn').addEventListener('click', function() {
+      const checkboxes = document.querySelectorAll('#purposeForm input[type="checkbox"]:checked');
+      const purposes = Array.from(checkboxes).map(cb => cb.value);
+
+      if (purposes.length === 0) {
+        alert('กรุณาเลือกอย่างน้อยหนึ่งวัตถุประสงค์');
+        return;
+      }
+
+      fetch('/api/download-record', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: 'user123', // อันนี้สมมติ ID ผู้ใช้
+          image_id: 'image456', // อันนี้สมมติ ID รูปภาพ
+          purposes: purposes,
+          downloaded_at: new Date().toISOString()
+        })
+      }).then(response => {
+        if (response.ok) {
+          window.location.href = '/download/image/image456';
+          document.getElementById('purposeModal').style.display = 'none';
+        } else {
+          alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+        }
+      });
+    });
+    
     </script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.2/dist/umd/popper.min.js" integrity="sha384-IQsoLXl5PILFhosVNubq5LC7Qb9DXgDA9i+tQ8Zj3iwWAwPtgFTxbJ8NT4GN1R8p" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.min.js" integrity="sha384-cVKIPhGWiC2Al4u+LWgxfKTRIcfu0JTxR+EQDz/bgldoEyl4H0zUF0QKbrJ0EcQF" crossorigin="anonymous"></script>
 </body>
 </html>

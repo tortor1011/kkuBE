@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ดาวน์โหลดรูปภาพ</title>
+  <style>
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.5);
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-content {
+      background-color: white;
+      padding: 20px;
+      border-radius: 5px;
+      width: 300px;
+    }
+  </style>
+</head>
+<body>
+  <h1>รูปภาพตัวอย่าง</h1>
+  <button id="downloadBtn">ดาวน์โหลด</button>
+
+  <!-- Modal -->
+  <div id="purposeModal" class="modal">
+    <div class="modal-content">
+      <h2>กรุณาเลือกวัตถุประสงค์</h2>
+      <form id="purposeForm">
+        <label><input type="checkbox" value="ประชาสัมพันธ์"> ใช้ในการประชาสัมพันธ์</label><br>
+        <label><input type="checkbox" value="สื่อการเรียนการสอน"> ใช้เป็นสื่อการเรียนการสอน</label><br>
+        <label><input type="checkbox" value="ต่อยอดโครงงาน"> ใช้ต่อยอดโครงงาน</label><br>
+        <label><input type="checkbox" value="ดูเล่น"> อัพไว้ดูเล่น</label><br>
+        <button type="button" id="confirmBtn">ยืนยัน</button>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('downloadBtn').addEventListener('click', function() {
+      document.getElementById('purposeModal').style.display = 'flex';
+    });
+
+    document.getElementById('confirmBtn').addEventListener('click', function() {
+      const checkboxes = document.querySelectorAll('#purposeForm input[type="checkbox"]:checked');
+      const purposes = Array.from(checkboxes).map(cb => cb.value);
+
+      if (purposes.length === 0) {
+        alert('กรุณาเลือกอย่างน้อยหนึ่งวัตถุประสงค์');
+        return;
+      }
+
+      fetch('/api/download-record', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          user_id: 'user123', // สมมติ ID ผู้ใช้
+          image_id: 'image456', // สมมติ ID รูปภาพ
+          purposes: purposes,
+          downloaded_at: new Date().toISOString()
+        })
+      }).then(response => {
+        if (response.ok) {
+          window.location.href = '/download/image/image456';
+          document.getElementById('purposeModal').style.display = 'none';
+        } else {
+          alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+        }
+      });
+    });
+  </script>
+</body>
+</html>

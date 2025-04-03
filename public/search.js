@@ -20,7 +20,7 @@ app.use(cors());
 app.use(express.json({ limit: '2gb' }));
 app.use(express.urlencoded({ limit: '2gb', extended: true }));
 
-// ตั้งค่า timeout ของ Express (10 นาที = 600,000 ms)
+// ตั้งค่า timeout
 app.use((req, res, next) => {
     req.setTimeout(600000); // 10 นาที
     res.setTimeout(600000); // 10 นาที
@@ -53,12 +53,20 @@ const uploadImagesOnly = multer({
 // เสิร์ฟไฟล์จากโฟลเดอร์ uploads
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// เปลี่ยนชื่อฐานข้อมูลตามที่คุณต้องการ (เช่น mydatabase)
+// เปลี่ยนชื่อฐานข้อมูล
 mongoose.connect('mongodb://localhost:27017/kkustockphoto', {
     useNewUrlParser: true,
     useUnifiedTopology: true
 }).then(() => console.log('MongoDB connected'))
   .catch(err => console.error('MongoDB connection error:', err));
+
+
+// Purpose Schema
+const purposeSchema = new mongoose.Schema({
+    image_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Image', required: true },
+    purposes: [{ type: String, required: true }], // วัตถุประสงค์การดาวน์โหลด (เก็บเป็น array)
+    downloaded_at: { type: Date, default: Date.now }
+});
 
 // Album Schema
 const albumSchema = new mongoose.Schema({
@@ -88,6 +96,16 @@ const albumSchema = new mongoose.Schema({
 });
 const Album = mongoose.model('Album', albumSchema);
 
+// DownloadLog Schema (ในไฟล์ MongoDB Schema)
+
+
+const downloadLogSchema = new mongoose.Schema({
+    image_id: { type: mongoose.Schema.Types.ObjectId, ref: 'Image', required: true },
+    purposes: [{ type: String }], // วัตถุประสงค์ที่เลือก (เก็บเป็น array)
+    downloaded_at: { type: Date, default: Date.now }
+});
+
+const DownloadLog = mongoose.model('DownloadLog', downloadLogSchema);
 // Image Schema
 const imageSchema = new mongoose.Schema({
     title: { type: String, required: true },
@@ -401,20 +419,39 @@ app.get('/image/:id/fullsize', async (req, res) => {
 });
 
 // API: ดาวน์โหลดรูปภาพ
-app.get('/image/:id/download', async (req, res) => {
+app.post('/image/download', async (req, res) => {
     try {
-        const image = await Image.findById(req.params.id);
-        if (!image || !image.fullsize || !image.fullsize.path) {
-            return res.status(404).json({ error: 'Image or fullsize not found' });
+        // ตรวจสอบข้อมูลที่จำเป็น
+        if (!imageId || !purposes || !Array.isArray(purposes) || purposes.length === 0) {
+            return res.status(400).json({ error: 'กรุณาระบุ imageId และเลือกวัตถุประสงค์อย่างน้อยหนึ่งอย่าง' });
         }
 
+        const purposes = req.body.imageId; // วัตถุประสงค์ที่เลือก
+        console.log('Purposes:', purposes); // Debugging log
+        // ตรวจสอบว่ามีการส่งวัตถุประสงค์มาหรือไม่
+        if (!purposes) {
+            return res.status(400).json({ error: 'เลือกซักอย่างดิไอ้สัส'});
+        }
+        const image = await Image.findById(purposes);
+        if (!image || !image.fullsize || !image.fullsize.path) {
+            return res.status(404).json({ error: 'หารูปไม่เจอหรือเธอไม่มี' });
+        }
+        
+        const downloadLog = new DownloadLog({
+            image_id: image._id,
+            purposes
+        });
+        await downloadLog.save();
+        
         image.downloads += 1;
         await image.save();
 
         res.download(path.join(__dirname, image.fullsize.path), `${image.title}`);
     } catch (error) {
         console.error('Error in /image/:id/download:', error);
-        res.status(500).json({ error: error.message });
+        res.status(500).json({ error: 'ผิดพลาด กูไม่รู้ผิดตรงไหน' });
+
+
     }
 });
 
@@ -716,5 +753,72 @@ app.get('/search', async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+// ตัวแปรเก็บ ID ของรูปภาพที่กำลังจะดาวน์โหลด
+let currentImageId = null;
 
+// ฟังก์ชันเปิด popup
+function openDownloadPopup(imageId) {
+    currentImageId = imageId;
+    document.getElementById('downloadPopup').style.display = 'block';
+}
+
+// ฟังก์ชันปิด popup
+function closePopup() {
+    document.getElementById('downloadPopup').style.display = 'none';
+}
+
+function submitDownload() {
+    const purposes = Array.from(document.querySelectorAll('#purposeForm input[name="purposes"]:checked')).map(cb => cb.value);
+    if (purposes.length === 0) {
+        alert('กรุณาเลือกอย่างน้อยหนึ่งวัตถุประสงค์');
+        return;
+    }
+
+    fetch(`http://localhost:3000/image/download`, {
+        method: 'POST',
+        body: JSON.stringify({ 
+            imageId: currentImageId,
+            purposes: purposes 
+        }),
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(res => {
+        if (!res.ok) {
+            throw new Error('การดาวน์โหลดล้มเหลว');
+        }
+        return res.blob();
+    })
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `image_${currentImageId}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        closePopup();
+    })
+    .catch(err => {
+        console.error('เกิดข้อผิดพลาดในการดาวน์โหลด:', err);
+        alert('เกิดข้อผิดพลาดในการดาวน์โหลด');
+    });
+}
+
+// ปรับปรุงการแสดงผลรูปภาพ (ตัวอย่าง)
+function displayImages(images) {
+    const imageList = document.getElementById('imageList');
+    imageList.innerHTML = images.map(img => {
+        return `
+            <div class="image-item" data-image-id="${img._id}">
+                <img src="${img.thumbnail.path}" alt="${img.title}">
+                <p>${img.title}</p>
+                <div class="image-meta">
+                    <span>ถ่ายรูปโดย: ${img.photographer}</span><br>
+                    <span>Downloads: ${img.downloads}</span><br>
+                    <a href="#" onclick="openDownloadPopup('${img._id}'); return false;">ดาวน์โหลด</a>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
 app.listen(3000, () => console.log('Server running on port 3000'));

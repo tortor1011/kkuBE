@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Photo Gallery</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+        #imageList {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        .image-item {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+        }
+        .image-item img {
+            max-width: 100%;
+            height: auto;
+        }
+        .image-meta {
+            margin-top: 10px;
+        }
+        #downloadPopup {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 20px;
+            border: 1px solid #ccc;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            z-index: 1000;
+        }
+        #overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+        }
+        button {
+            padding: 5px 10px;
+            margin: 5px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Stock Photo Gallery</h1>
+    <div id="imageList"></div>
+
+    <!-- Overlay -->
+    <div id="overlay" onclick="closePopup()"></div>
+
+    <!-- Popup สำหรับเลือกวัตถุประสงค์ -->
+    <div id="downloadPopup">
+        <h2>เลือกวัตถุประสงค์การดาวน์โหลด</h2>
+        <form id="purposeForm">
+            <label><input type="checkbox" name="purposes" value="ใช้ในการเรียนการสอน"> ใช้ในการเรียนการสอน</label><br>
+            <label><input type="checkbox" name="purposes" value="เผยแพร่สื่อ"> เผยแพร่สื่อ</label><br>
+            <label><input type="checkbox" name="purposes" value="งานวิจัย"> งานวิจัย</label><br>
+            <label><input type="checkbox" name="purposes" value="ส่วนตัว"> ส่วนตัว</label><br>
+        </form>
+        <button onclick="submitDownload()">ดาวน์โหลด</button>
+        <button onclick="closePopup()">ยกเลิก</button>
+    </div>
+
+    <script>
+        let currentImageId = null;
+
+        // โหลดรายการรูปภาพเมื่อหน้าโหลด
+        window.onload = function() {
+            fetch('http://localhost:3000/images')
+                .then(response => response.json())
+                .then(images => displayImages(images))
+                .catch(error => console.error('Error loading images:', error));
+        };
+
+        // แสดงรายการรูปภาพ
+        function displayImages(images) {
+            const imageList = document.getElementById('imageList');
+            imageList.innerHTML = images.map(img => {
+                return `
+                    <div class="image-item" data-image-id="${img._id}">
+                        <img src="http://localhost:3000/${img.thumbnail.path}" alt="${img.title}">
+                        <p>${img.title}</p>
+                        <div class="image-meta">
+                            <span>ถ่ายโดย: ${img.photographer}</span><br>
+                            <span>ดาวน์โหลด: ${img.downloads}</span><br>
+                            <a href="#" onclick="openDownloadPopup('${img._id}'); return false;">ดาวน์โหลด</a>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // เปิด popup
+        function openDownloadPopup(imageId) {
+            currentImageId = imageId;
+            document.getElementById('downloadPopup').style.display = 'block';
+            document.getElementById('overlay').style.display = 'block';
+            document.getElementById('purposeForm').reset(); // รีเซ็ต checkbox
+        }
+
+        // ปิด popup
+        function closePopup() {
+            document.getElementById('downloadPopup').style.display = 'none';
+            document.getElementById('overlay').style.display = 'none';
+        }
+
+        // ส่งข้อมูลและดาวน์โหลด
+        function submitDownload() {
+            const purposes = Array.from(document.querySelectorAll('#purposeForm input[name="purposes"]:checked'))
+                .map(cb => cb.value);
+            if (purposes.length === 0) {
+                alert('กรุณาเลือกอย่างน้อยหนึ่งวัตถุประสงค์');
+                return;
+            }
+
+            fetch(`http://localhost:3000/image/download`, {
+                method: 'POST',
+                body: JSON.stringify({ 
+                    imageId: currentImageId,
+                    purposes: purposes 
+                }),
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(res => {
+                if (!res.ok) {
+                    throw new Error('การดาวน์โหลดล้มเหลว');
+                }
+                return res.blob();
+            })
+            .then(blob => {
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `image_${currentImageId}`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                closePopup();
+            })
+            .catch(err => {
+                console.error('เกิดข้อผิดพลาดในการดาวน์โหลด:', err);
+                alert('เกิดข้อผิดพลาดในการดาวน์โหลด');
+            });
+        }
+    </script>
+</body>
+</html>
